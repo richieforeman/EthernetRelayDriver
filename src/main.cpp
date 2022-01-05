@@ -12,17 +12,24 @@
 #define E131_FRAME_UNIVERSE 113
 #define E131_DMP_DATA 125
 #define E131_DMP_COUNT 123
+// E131 ACN Header data begins at bit 4
+#define E131_ACN_PACKET_HEADER_OFFSET 4
 const uint8_t _E131_ACN_PACKET_IDENTIFIER[] = {0x41, 0x53, 0x43, 0x2d, 0x45, 0x31, 0x2e, 0x31, 0x37, 0x00, 0x00, 0x00};
 
 #define ETHERNET_BUFFER_MAX 640
 
 #define SDCARD_CONTROL 4
 
+#define USB_SERIAL_DEBUG_BAUD 9600
 #define RELAY_COUNT 8
 #define OFF HIGH
 #define ON LOW
-
 #define RELAY_THRESHOLD_VALUE 127
+
+#define RANDOM_MODE 1
+#define RANDOM_MODE_TIMEOUT 10000
+#define RANDOM_MODE_INTERVAL 1500
+#define RANDOM_PERCENT_CHANCE 50
 
 int Relay[] = {
     42,
@@ -38,6 +45,7 @@ int Relay[] = {
 //Timer Setup
 long packetsError = 0;
 long packetsReceived = 0;
+volatile unsigned long lastPacket = 0;
 
 //Ethernet Configuration
 //A8:61:0A:AE:81:80
@@ -48,19 +56,11 @@ IPAddress ip(192, 168, 86, 5); //IP address of ethernet shield
 // buffer to hold E1.31 data
 unsigned char packetBuffer[ETHERNET_BUFFER_MAX];
 EthernetUDP suUDP;
-
 EthernetServer server(80);
 
-void setup()
-{
-  delay(3000);
-  Serial.begin(9600);
-  wdt_enable(WDTO_4S);
-  pinMode(SDCARD_CONTROL, OUTPUT);
-  digitalWrite(SDCARD_CONTROL, HIGH);
+void powerOnSelfTest() {
   for (int i = 0; i < RELAY_COUNT; i++)
   {
-    pinMode(Relay[i], OUTPUT);
     digitalWrite(Relay[i], OFF);
     delay(200);
     digitalWrite(Relay[i], ON);
@@ -68,14 +68,16 @@ void setup()
     digitalWrite(Relay[i], OFF);
     wdt_reset();
   }
-  Ethernet.begin(mac, ip);
+}
 
+void waitForEthernet() {
   if (Ethernet.hardwareStatus() == EthernetNoHardware)
   {
     Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
     while (true)
     {
       delay(1); // do nothing, no point running without Ethernet hardware
+      wdt_reset();
     }
   }
 
@@ -85,14 +87,9 @@ void setup()
     while (true)
     {
       delay(1); // do nothing, no point running without Ethernet hardware
+      wdt_reset();
     }
   }
-
-  suUDP.begin(E131_PORT);
-
-  Serial.print("server is at ");
-  Serial.println(Ethernet.localIP());
-  wdt_reset();
 }
 
 void sacnDMXReceived(unsigned char *frame, int count)
@@ -117,8 +114,12 @@ void sacnDMXReceived(unsigned char *frame, int count)
 //checks to see if packet is E1.31 data
 int checkACNHeaders(unsigned char *frame, int messagelength)
 {
-  // TODO(richieforeman): We should really be comparing the whole ACN header
-  if (frame[1] == 0x10 && frame[4] == _E131_ACN_PACKET_IDENTIFIER[0] && frame[12] == _E131_ACN_PACKET_IDENTIFIER[8])
+  for(int i = 0; i++; i < sizeof(_E131_ACN_PACKET_IDENTIFIER + 1)) {
+    if(frame[i + E131_ACN_PACKET_HEADER_OFFSET] != _E131_ACN_PACKET_IDENTIFIER[i]) {
+      return 0;
+    }
+  }
+  if (frame[1] == 0x10)
   {
     int addresscount = frame[E131_DMP_COUNT] * 256 + frame[124];
     return addresscount - 1;
@@ -132,6 +133,7 @@ void udpLoop()
   int packetSize = suUDP.parsePacket();
   if (packetSize)
   {
+    lastPacket = millis();
     packetsReceived++;
     suUDP.read(packetBuffer, ETHERNET_BUFFER_MAX);
     int count = checkACNHeaders(packetBuffer, packetSize);
@@ -143,6 +145,8 @@ void udpLoop()
     {
       packetsError++;
     }
+  } else {
+    // No packet was received on this loop
   }
   wdt_reset();
 }
@@ -172,6 +176,8 @@ void webStatus() {
           client.println(packetsReceived);
           client.println("/");
           client.println(packetsError);
+          client.println("<br>");
+          client.println(millis() - lastPacket);
           client.println("</html>");
           break;
         }
@@ -199,4 +205,45 @@ void loop()
 {
   udpLoop(); // Process UDP data before webserver stuff.
   webStatus();
+  if(RANDOM_MODE) {
+    randomMode();
+  }
+}
+
+void randomMode() {
+  int timeSinceLastPacket = millis() - lastPacket;
+
+  if(timeSinceLastPacket > RANDOM_MODE_TIMEOUT) {
+    wdt_reset();
+    delay(RANDOM_MODE_INTERVAL);
+    for (int i = 0; i < RELAY_COUNT; i++)
+    {
+      int val = random(0, 100);
+      digitalWrite(Relay[i], val < RANDOM_PERCENT_CHANCE ? OFF : ON);
+      wdt_reset();
+    }
+  }
+}
+
+
+void setup()
+{
+  delay(1500);
+  Serial.begin(USB_SERIAL_DEBUG_BAUD);
+  wdt_enable(WDTO_4S);
+  pinMode(SDCARD_CONTROL, OUTPUT);
+  digitalWrite(SDCARD_CONTROL, HIGH);
+
+  for (int i = 0; i < RELAY_COUNT; i++) {
+    pinMode(Relay[i], OUTPUT);
+  }
+  powerOnSelfTest();
+  Ethernet.begin(mac, ip);
+  waitForEthernet();
+
+  suUDP.begin(E131_PORT);
+
+  Serial.print("server is at ");
+  Serial.println(Ethernet.localIP());
+  wdt_reset();
 }
