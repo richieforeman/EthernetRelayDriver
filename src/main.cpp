@@ -13,7 +13,7 @@
 #define E131_DMP_DATA 125
 #define E131_DMP_COUNT 123
 // E131 ACN Header data begins at bit 4
-#define E131_ACN_PACKET_HEADER_OFFSET 4
+#define E131_ACN_PACKET_HEADER_FRAME_OFFSET 4
 const uint8_t _E131_ACN_PACKET_IDENTIFIER[] = {0x41, 0x53, 0x43, 0x2d, 0x45, 0x31, 0x2e, 0x31, 0x37, 0x00, 0x00, 0x00};
 
 #define ETHERNET_BUFFER_MAX 640
@@ -29,7 +29,7 @@ const uint8_t _E131_ACN_PACKET_IDENTIFIER[] = {0x41, 0x53, 0x43, 0x2d, 0x45, 0x3
 #define RANDOM_MODE 1
 #define RANDOM_MODE_TIMEOUT 10000
 #define RANDOM_MODE_INTERVAL 1500
-#define RANDOM_PERCENT_CHANCE 50
+#define RANDOM_PERCENT_CHANCE 60
 
 int Relay[] = {
     42,
@@ -115,7 +115,7 @@ void sacnDMXReceived(unsigned char *frame, int count)
 int checkACNHeaders(unsigned char *frame, int messagelength)
 {
   for(int i = 0; i++; i < sizeof(_E131_ACN_PACKET_IDENTIFIER + 1)) {
-    if(frame[i + E131_ACN_PACKET_HEADER_OFFSET] != _E131_ACN_PACKET_IDENTIFIER[i]) {
+    if(frame[i + E131_ACN_PACKET_HEADER_FRAME_OFFSET] != _E131_ACN_PACKET_IDENTIFIER[i]) {
       return 0;
     }
   }
@@ -201,27 +201,30 @@ void webStatus() {
   }
 }
 
+
+void randomMode() {
+  long timeSinceLastPacket = millis() - lastPacket;
+
+  if(timeSinceLastPacket > RANDOM_MODE_TIMEOUT) {
+    wdt_reset();
+    delay(RANDOM_MODE_INTERVAL);
+    Serial.println("Random Cycle");
+    for (int i = 0; i < RELAY_COUNT; i++)
+    {
+      int val = random(0, 100);
+      digitalWrite(Relay[i], val < RANDOM_PERCENT_CHANCE ? OFF : ON);
+      delay(200);
+      wdt_reset();
+    }
+  }
+}
+
 void loop()
 {
   udpLoop(); // Process UDP data before webserver stuff.
   webStatus();
   if(RANDOM_MODE) {
     randomMode();
-  }
-}
-
-void randomMode() {
-  int timeSinceLastPacket = millis() - lastPacket;
-
-  if(timeSinceLastPacket > RANDOM_MODE_TIMEOUT) {
-    wdt_reset();
-    delay(RANDOM_MODE_INTERVAL);
-    for (int i = 0; i < RELAY_COUNT; i++)
-    {
-      int val = random(0, 100);
-      digitalWrite(Relay[i], val < RANDOM_PERCENT_CHANCE ? OFF : ON);
-      wdt_reset();
-    }
   }
 }
 
