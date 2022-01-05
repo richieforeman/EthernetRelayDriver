@@ -14,7 +14,7 @@
 #define E131_DMP_COUNT 123
 // E131 ACN Header data begins at bit 4
 #define E131_ACN_PACKET_HEADER_FRAME_OFFSET 4
-const uint8_t _E131_ACN_PACKET_IDENTIFIER[] = {0x41, 0x53, 0x43, 0x2d, 0x45, 0x31, 0x2e, 0x31, 0x37, 0x00, 0x00, 0x00};
+const byte _E131_ACN_PACKET_IDENTIFIER[] = {0x41, 0x53, 0x43, 0x2d, 0x45, 0x31, 0x2e, 0x31, 0x37, 0x00, 0x00, 0x00};
 
 #define ETHERNET_BUFFER_MAX 640
 
@@ -31,7 +31,7 @@ const uint8_t _E131_ACN_PACKET_IDENTIFIER[] = {0x41, 0x53, 0x43, 0x2d, 0x45, 0x3
 #define RANDOM_MODE_INTERVAL 1500
 #define RANDOM_PERCENT_CHANCE 60
 
-int Relay[] = {
+const int Relay[] = {
     42,
     40,
     38,
@@ -49,8 +49,8 @@ volatile unsigned long lastPacket = 0;
 
 //Ethernet Configuration
 //A8:61:0A:AE:81:80
-byte mac[] = {0xA8, 0x61, 0x0A, 0xAE, 0x81, 0x80};
-IPAddress ip(192, 168, 86, 5); //IP address of ethernet shield
+const byte mac[] = {0xA8, 0x61, 0x0A, 0xAE, 0x81, 0x80};
+const IPAddress ip(192, 168, 86, 5); //IP address of ethernet shield
 
 
 // buffer to hold E1.31 data
